@@ -1,10 +1,9 @@
-var express = require('express');
-var logger = require('morgan');
-var bodyParser = require('body-parser');
-var exphbs  = require('express-handlebars');
-var helmet = require('helmet');
-var app = express();
-var server = require('http').Server(app);
+const express = require('express');
+const logger = require('morgan');
+const exphbs = require('express-handlebars');
+const helmet = require('helmet');
+const app = express();
+const server = require('http').Server(app);
 
 //setup security ===============================================================
 require('./app/shared/security-setup')(app, helmet);
@@ -15,8 +14,8 @@ app.use(logger('dev')); // log every request to the console
 // set up our express application ==============================================
 
 // Make the body object available on the request
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
+app.use(express.json());
+app.use(express.urlencoded({extended: true}));
 
 // set handlebars as default templating engine
 app.engine('handlebars', exphbs({defaultLayout: 'layout'}));
