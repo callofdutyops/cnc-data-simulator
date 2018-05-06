@@ -3,51 +3,45 @@
 /**
  * Module dependencies.
  */
-
-var app = require('../server').app;
-var cluster = require('cluster');
-var debug = require('debug')('temp:server');
-var http = require('http');
-var numCPUs = process.env.WORKERS || require('os').cpus().length;
+const app = require('../server').app;
+const cluster = require('cluster');
+const debug = require('debug')('temp:server');
+const http = require('http');
+const numCPUs = process.env.WORKERS || require('os').cpus().length;
+const server = require('../server').server;
 
 /**
  * Get port from environment and store in Express.
  */
-
-var port = normalizePort(process.env.PORT || '3000');
+let port = normalizePort(process.env.PORT || '3000');
 app.set('port', port);
 
 if (cluster.isMaster) {
-  // Fork workers.
-  for (var i = 0; i < numCPUs; i++) {
-    cluster.fork();
-  }
+    // Fork workers.
+    for (let i = 0; i < numCPUs; i++) {
+        cluster.fork();
+    }
 
-  // If a worker dies, log it to the console and start another worker.
-  cluster.on('exit', function(worker, code, signal) {
-    console.log('Worker ' + worker.process.pid + ' died.');
-    cluster.fork();
-  });
+    // If a worker dies, log it to the console and start another worker.
+    cluster.on('exit', function (worker, code, signal) {
+        console.log('Worker ' + worker.process.pid + ' died.');
+        cluster.fork();
+    });
 
-  // Log when a worker starts listening
-  cluster.on('listening', function(worker, address) {
-    console.log('Worker started with PID ' + worker.process.pid + '.');
-  });
+    // Log when a worker starts listening
+    cluster.on('listening', function (worker, address) {
+        console.log('Worker started with PID ' + worker.process.pid + '.');
+    });
 
 } else {
-  /**
-   * Create HTTP server.
-   */
 
-  var server = require('../server').server;
+    /**
+     * Listen on provided port, on all network interfaces.
+     */
+    server.listen(port);
 
-  /**
-   * Listen on provided port, on all network interfaces.
-   */
-  server.listen(port);
-
-  server.on('error', onError);
-  server.on('listening', onListening);
+    server.on('error', onError);
+    server.on('listening', onListening);
 }
 
 // The rest of the bin/www file.....
@@ -57,19 +51,19 @@ if (cluster.isMaster) {
  */
 
 function normalizePort(val) {
-  var port = parseInt(val, 10);
+    const port = parseInt(val, 10);
 
-  if (isNaN(port)) {
-    // named pipe
-    return val;
-  }
+    if (isNaN(port)) {
+        // named pipe
+        return val;
+    }
 
-  if (port >= 0) {
-    // port number
-    return port;
-  }
+    if (port >= 0) {
+        // port number
+        return port;
+    }
 
-  return false;
+    return false;
 }
 
 /**
@@ -77,25 +71,25 @@ function normalizePort(val) {
  */
 
 function onError(error) {
-  if (error.syscall !== 'listen') {
-    throw error;
-  }
+    if (error.syscall !== 'listen') {
+        throw error;
+    }
 
-  var bind = typeof port === 'string' ? 'Pipe ' + port : 'Port ' + port;
+    const bind = typeof port === 'string' ? 'Pipe ' + port : 'Port ' + port;
 
-  // handle specific listen errors with friendly messages
-  switch (error.code) {
-    case 'EACCES':
-      console.error(bind + ' requires elevated privileges');
-      process.exit(1);
-      break;
-    case 'EADDRINUSE':
-      console.error(bind + ' is already in use');
-      process.exit(1);
-      break;
-    default:
-      throw error;
-  }
+    // handle specific listen errors with friendly messages
+    switch (error.code) {
+        case 'EACCES':
+            console.error(bind + ' requires elevated privileges');
+            process.exit(1);
+            break;
+        case 'EADDRINUSE':
+            console.error(bind + ' is already in use');
+            process.exit(1);
+            break;
+        default:
+            throw error;
+    }
 }
 
 /**
@@ -103,7 +97,7 @@ function onError(error) {
  */
 
 function onListening() {
-  var addr = server.address();
-  var bind = typeof addr === 'string' ? 'pipe ' + addr : 'port ' + addr.port;
-  debug('Listening on ' + bind);
+    let addr = server.address();
+    const bind = typeof addr === 'string' ? 'pipe ' + addr : 'port ' + addr.port;
+    debug('Listening on ' + bind);
 }

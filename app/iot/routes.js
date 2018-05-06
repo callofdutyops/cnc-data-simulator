@@ -1,10 +1,10 @@
-module.exports = function (app) {
+module.exports = app => {
 
-    app.get('/', function (req, res) {
+    app.get('/', (req, res) => {
         res.redirect('/simulator');
     });
 
-    app.get('/simulator', function (req, res) {
+    app.get('/simulator', (req, res) => {
         res.render('iot/simulator');
     });
     

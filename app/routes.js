@@ -1,5 +1,5 @@
-module.exports = function(app) {
-    
+module.exports = function (app) {
+
     require('./iot/routes.js')(app);
-    
+
 };

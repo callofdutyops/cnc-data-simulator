@@ -1,4 +1,4 @@
-module.exports = function(app, helmet) {
+module.exports = (app, helmet) => {
   //Make sure all requests use HTTPS instead of HTTP. We need to enbale the trust proxy
   //because when deploying to Heroku, Heroku is between the server and the client. So we need to let out app now about this.
   //we use helmet to keep them on HTTPS and not go back to HTTP

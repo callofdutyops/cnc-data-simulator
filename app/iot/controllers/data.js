@@ -1,32 +1,32 @@
-var Data = require('../models/data'),
+const Data = require('../models/data'),
     kafka = require('kafka-node'),
     configFile = require('../../shared/config');
 
-var zookeeperAddress = configFile.middlewares.zookeeper.address,
+const zookeeperAddress = configFile.middlewares.zookeeper.address,
     topic = configFile.topics.test,
     kafkaClient = new kafka.Client(zookeeperAddress),
     HighLevelProducer = kafka.HighLevelProducer,
-    producer = new HighLevelProducer(kafkaClient),
-    producerReady = false;
+    producer = new HighLevelProducer(kafkaClient);
+let producerReady = false;
 
-producer.on('ready', function () {
+producer.on('ready', () => {
     producerReady = true;
 });
-producer.on('error', function (err) {
+producer.on('error', err => {
     producerReady = false;
     console.log('error', err);
 });
 
-exports.all = function (req, res) {
+exports.all = (req, res) => {
     Data.find({}, function (err, docs) {
         if (err) throw err;
         res.json(docs);
     });
 }
 
-exports.write = function (req, res, next) {
+exports.write = (req, res, next) => {
 
-    req.body.forEach(function (r, i) {
+    req.body.forEach((r, i) => {
 
         const newData = new Data({
             ESP_OPS: req.body[i]['ESP_OPS'],
@@ -42,25 +42,23 @@ exports.write = function (req, res, next) {
         });
 
         if (producerReady) {
-            var payloads = [
+            const payloads = [
                 {topic: topic, messages: newData},
             ];
-            producer.send(payloads, function (err, data) {
+            producer.send(payloads, (err, data) => {
                 console.log(data);
             });
         }
-        newData.save(function (err) {
+        newData.save(err => {
             if (err) throw err;
             res.end("Post succesfull");
         });
     })
 }
 
-exports.delete = function (req, res, next) {
-
+exports.delete = (req, res, next) => {
     Data.find({}).remove(function (err) {
         if (err) throw err;
         res.end('data deleted')
     });
-
 }
