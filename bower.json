@@ -15,7 +15,7 @@
   ],
   "dependencies": {
     "jquery": "^3.3.1",
-    "bootstrap": "^4.1.1",
+    "bootstrap": "^3.3.7",
     "socket.io-client": "^2.1.0",
     "animate.css": "^3.5.2",
     "remarkable-bootstrap-notify": "^3.1.3",

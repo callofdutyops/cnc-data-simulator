@@ -105,7 +105,7 @@ function deviceInputFieldClicked() {
                             id: deviceId,
                             placeholder: 'Device name (No Spaces)'
                         }),
-                        div({ onClick: removeCreatedDevice, class: 'input-group-addon removeDevice' }, '❌')
+                        div({ onClick: removeCreatedDevice, class: 'input-group-addon removeDevice' }, 'x')
                     ),
                     label({ class: 'btn btn-default btn-file', style: 'margin-top:10px' },
                         span({ class: 'deviceImageLabel' }, 'Select Picture'),
@@ -152,7 +152,7 @@ function generateInitialAttributeForm() {
                             id: attributeId,
                             placeholder: 'Attribute Name (No spaces)'
                         }),
-                        div({ class: 'input-group-addon removeAttribute' }, '❌')
+                        div({ class: 'input-group-addon removeAttribute' }, 'x')
                     )
                 )
             );
@@ -267,7 +267,7 @@ function attributeInputFieldClicked(e) {
                     id: attributeId,
                     placeholder: 'Attribute Name (No spaces)'
                 }),
-                div({ onClick: removeCreatedAttribute, class: 'input-group-addon removeAttribute' }, '❌')
+                div({ onClick: removeCreatedAttribute, class: 'input-group-addon removeAttribute' }, 'x')
             )
         );
 
