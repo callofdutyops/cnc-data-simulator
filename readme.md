@@ -8,7 +8,7 @@ Simulate a CNC to stream data to Kafka.
 
 1. Add multiple CNCs.
 2. Add metrics of CNCs.
-2. Stream data to Kafka.
+3. Stream data to Kafka.
 
 ## Use
 
