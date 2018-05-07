@@ -43,6 +43,10 @@ Simulate a CNC to stream data to Kafka.
 
 Contributions and ideas are more than welcome!
 
+# TODO
+- [ ] Gcode toolpath generate
+- [ ] Store CNC and attributes in database
+
 # Troubleshooting / FAQ
 
 If you an access-Control-Allow-Origin error install following chrome extension: Allow-Control-Allow-Origin and enable it, make sure the icon is green and then try again.
