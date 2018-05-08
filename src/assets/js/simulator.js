@@ -69,7 +69,7 @@ const {
 } = require('elementx');
 
 // local ip address
-const localIP = '192.168.1.154';
+const localURL = `${location.protocol}//${location.hostname}${location.port ? ':' + location.port : ''}`;
 
 // ##############################################################
 // ######           Functions                              ######
@@ -791,7 +791,7 @@ function getDataToSend(device) {
 function sendData(device) {
     function sendData() {
         const dataJson = JSON.stringify(getDataToSend(device));
-        const dataUrl = `http://${localIP}:3000/simulator/data`;
+        const dataUrl = `${localURL}/simulator/data`;
         const settings = generatePostJsonSettings(dataUrl, dataJson);
 
         $.ajax(settings).done(function (response) {
@@ -804,7 +804,7 @@ function sendData(device) {
 
 function sendDeviceGcode(device) {
     const gcodeJson = JSON.stringify({"device": device, "gcode": devicesSpecialData[device]["gcode"]});
-    const gcodeURL = `http://${localIP}:3000/simulator/data/gcode`;
+    const gcodeURL = `${localURL}/simulator/data/gcode`;
     const settings = generatePostJsonSettings(gcodeURL, gcodeJson);
 
     $.ajax(settings).done(function (response) {

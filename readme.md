@@ -2,19 +2,23 @@
 
 # CNC data simulator
 
-Simulate a CNC to stream data to Kafka.
+Simulate a CNC to stream data to MongoDB and Kafka.
 
 ## Main functions
 
 1. Add multiple CNCs.
 2. Add metrics of CNCs.
-3. Stream data to Kafka.
+3. Gcode toolpath generate and stream integrated.
+4. Stream data to Kafka.
 
 ## Use
 
 1. Setup Kafka.
 
-    [Kafka manual](http://kafka.apache.org/)
+    1. [Kafka manual](http://kafka.apache.org/)
+    2. create a topic and modify the `app/shared/config.js`
+        (both the address of middleware and topic name)
+    
 
 2. Clone the project.
     ```shell
@@ -30,10 +34,16 @@ Simulate a CNC to stream data to Kafka.
     ```shell
     $ npm run dev
     ```
+    If you want the server auto restart when you coding, just start
+    `watch` script.
+    ```shell
+    $ npm run watch
+    ```
     
 5. Navigate to the following url.
 
-    [http://localhost:3000/simulator](http://localhost:3000/simulator)
+    http://`local_ip`:3000/simulator 
+    (`local_ip` is defined in the `app/shared/config.js`)
 
 ## Other
 
@@ -44,13 +54,13 @@ Simulate a CNC to stream data to Kafka.
 Contributions and ideas are more than welcome!
 
 # TODO
-- [ ] Gcode toolpath generate
+- [x] Gcode toolpath generate
 - [ ] Store CNC and attributes in database
 
 # Troubleshooting / FAQ
 
-If you an access-Control-Allow-Origin error install following chrome extension: Allow-Control-Allow-Origin and enable it, make sure the icon is green and then try again.
-If using other sites, makes sure to turn it off again.
+Don't forget to modify the `local_ip` in `app/shared/config.js` 
+(localhost or your real ip)
 
 # Special thanks
 
