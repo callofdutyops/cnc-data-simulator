@@ -2,16 +2,17 @@
 
 # CNC data simulator
 
-Simulate a CNC to stream data to MongoDB and Kafka.
+Simulate CNCs streaming data to MongoDB and Kafka.
 
 ## Main functions
 
 1. Add multiple CNCs.
-2. Add metrics of CNCs.
-3. Gcode toolpath generate and stream integrated.
+2. Add attributes(such as temperature, current and so on) of CNCs.
+3. Gcode toolpath generation and streaming integrated.
 4. Stream data to Kafka.
 
 ## Use
+Prereqruisite: You should have workong [nodejs and npm](https://nodejs.org/).
 
 1. Setup Kafka.
 
