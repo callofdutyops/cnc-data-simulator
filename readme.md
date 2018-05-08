@@ -16,7 +16,7 @@ Simulate a CNC to stream data to MongoDB and Kafka.
 1. Setup Kafka.
 
     1. [Kafka manual](http://kafka.apache.org/)
-    2. create a topic and modify the `app/shared/config.js`
+    2. create a topic and modify the [config file](app/shared/config.js)
         (both the address of middleware and topic name)
     
 
@@ -43,7 +43,7 @@ Simulate a CNC to stream data to MongoDB and Kafka.
 5. Navigate to the following url.
 
     http://`local_ip`:3000/simulator 
-    (`local_ip` is defined in the `app/shared/config.js`)
+    (`local_ip` is defined in the [config file](app/shared/config.js))
 
 ## Other
 
@@ -59,7 +59,7 @@ Contributions and ideas are more than welcome!
 
 # Troubleshooting / FAQ
 
-Don't forget to modify the `local_ip` in `app/shared/config.js` 
+Don't forget to modify the `local_ip` in [config file](app/shared/config.js) 
 (localhost or your real ip)
 
 # Special thanks
