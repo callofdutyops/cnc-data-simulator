@@ -18,5 +18,7 @@ module.exports = {
     topics: {
         test: "test",
     },
-    settings: {}
+    settings: {
+        local_ip: '192.168.1.154',
+    }
 };

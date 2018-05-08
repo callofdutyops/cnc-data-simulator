@@ -13,6 +13,9 @@ module.exports = app => {
     
     // route to write data to the database
     app.post('/simulator/data', require('./controllers/data').write);
+
+    // route to convert gcode to toolpaths
+    app.post('/simulator/data/gcode', require('./controllers/data').gcode);
     
     // delete the data when the stream is stopped or when the app is closed
     app.get('/simulator/data/delete', require('./controllers/data').delete);

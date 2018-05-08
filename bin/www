@@ -9,6 +9,7 @@ const debug = require('debug')('temp:server');
 const http = require('http');
 const numCPUs = process.env.WORKERS || require('os').cpus().length;
 const server = require('../server').server;
+const configFile = require('../app/shared/config');
 
 /**
  * Get port from environment and store in Express.
@@ -38,7 +39,7 @@ if (cluster.isMaster) {
     /**
      * Listen on provided port, on all network interfaces.
      */
-    server.listen(port);
+    server.listen(port, configFile.settings.local_ip);
 
     server.on('error', onError);
     server.on('listening', onListening);

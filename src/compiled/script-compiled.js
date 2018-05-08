@@ -393,8 +393,6 @@ var submitAttributesButton = document.querySelector('#submitAttributes');
 var submitDataValuesButton = document.querySelector('#submitDataValues');
 var startStreamButton = document.querySelector('#startStream');
 var stopStreamButton = document.querySelector('#stopStream');
-var submitSdsSettingsButton = document.querySelector('#safeSDSSettings');
-var skipSdsSettingsButton = document.querySelector('#skipSDS');
 
 // --- Input fields ---//
 var createDeviceInputFields = Array.from(document.querySelectorAll('.createDevice'));
@@ -417,15 +415,18 @@ var amountOfNumberValues = [];
 var amountOfBooleanValues = [];
 var amountOfStringValues = [];
 
+// which line of gcode should be sent per CNC.
+var currentGcodes = {};
+
+// store special attributes class
+var specialAttributesClassNames = [".gcodeAttribute", ".freqAttribute"];
+var specialAttributesClassNamesMap = { ".gcodeAttribute": "gcode", ".freqAttribute": "freq" };
+
 // array of base64 image urls
 var devicePictures = [];
 
 // global var to store the interval running to push data (so we can clear it)
 var streamingInterval = [];
-
-// if sds project is used, store the settings entered by the user
-var isSdsProject = false;
-var sdsSettings = {};
 
 // vars to store the amount of devices and attributes created (to show counter next to input field)
 var numberOfCreateDevicesInputFields = 1;
@@ -433,12 +434,12 @@ var numberOfAttributesCreated = {};
 
 // object to store all data the user enters
 var devicesData = {};
+var devicesSpecialData = {};
 
 // using elementx to create DOM elements (cleaner syntax that just document.createElement)
 
 var _require = require('elementx'),
     div = _require.div,
-    h1 = _require.h1,
     h2 = _require.h2,
     button = _require.button,
     input = _require.input,
@@ -448,7 +449,14 @@ var _require = require('elementx'),
     option = _require.option,
     img = _require.img,
     form = _require.form,
-    p = _require.p;
+    p = _require.p,
+    i = _require.i,
+    textarea = _require.textarea;
+
+// local ip address
+
+
+var localIP = '192.168.1.154';
 
 // ##############################################################
 // ######           Functions                              ######
@@ -472,18 +480,18 @@ function removeCreatedDevice(e) {
 
 function deviceInputFieldClicked() {
 
-    if (document.querySelectorAll('.createDevice').length <= 20) {
+    if (document.querySelectorAll('.createDevice').length < 20) {
         numberOfCreateDevicesInputFields++;
         var deviceId = 'device' + numberOfCreateDevicesInputFields;
 
         // build the new input field
-        var container = div(div({ class: 'form-group animated slideInRight' }, div({ class: 'input-group' }, div({ class: 'input-group-addon' }, 'Device ' + numberOfCreateDevicesInputFields), input({
+        var container = div(div({ class: 'form-group animated slideInRight' }, div({ class: 'input-group' }, div({ class: 'input-group-addon' }, 'CNC ' + numberOfCreateDevicesInputFields), input({
             onClick: deviceInputFieldClicked,
             type: 'text',
             class: 'form-control createDevice',
             id: deviceId,
-            placeholder: 'Device name (No Spaces)'
-        }), div({ onClick: removeCreatedDevice, class: 'input-group-addon removeDevice' }, 'x')), label({ class: 'btn btn-default btn-file', style: 'margin-top:10px' }, span({ class: 'deviceImageLabel' }, 'Select Picture'), input({
+            placeholder: 'CNC name (No Spaces)'
+        }), div({ onClick: removeCreatedDevice, class: 'input-group-addon removeDevice' }, i({ class: "fas fa-times" }))), label({ class: 'btn btn-default btn-file', style: 'margin-top:10px' }, span({ class: 'deviceImageLabel' }, 'Select Picture'), input({
             onChange: pictureSelected,
             type: 'file',
             class: 'deviceImage',
@@ -508,14 +516,28 @@ function generateInitialAttributeForm() {
         numberOfAttributesCreated[device] = 1;
         var attributeId = device + '/attribute' + numberOfAttributesCreated[device];
 
+        var gcodeId = device + '/gcode';
+        var freqId = device + '/freq';
+
         // create the a form for each device entered
-        var node = div({ 'data-device': device }, h2({}, device), div({ class: 'form-group' }, div({ class: 'input-group' }, div({ class: 'input-group-addon' }, 'Attribute ' + numberOfAttributesCreated[device]), input({
+        var node = div({ 'data-device': device }, h2({}, device), div({ class: 'form-group' }, label({ for: gcodeId }, "Gcode:"), textarea({
+            class: "form-control gcodeAttribute",
+            style: "height: 500px;",
+            row: "50",
+            id: gcodeId
+        })), div({ class: 'form-group' }, div({ class: 'input-group' }, div({ class: 'input-group-addon' }, 'SendFrequence(ms)'), input({
+            type: 'number',
+            class: 'form-control freqAttribute',
+            id: freqId,
+            placeholder: 'Data send frequence (unit is ms)',
+            value: "500"
+        }))), div({ class: 'form-group' }, div({ class: 'input-group' }, div({ class: 'input-group-addon' }, 'DataName ' + numberOfAttributesCreated[device]), input({
             onClick: attributeInputFieldClicked,
             type: 'text',
             class: 'form-control createAttribute',
             id: attributeId,
-            placeholder: 'Attribute Name (No spaces)'
-        }), div({ class: 'input-group-addon removeAttribute' }, 'x'))));
+            placeholder: 'Data Name (No spaces)'
+        }), div({ class: 'input-group-addon removeAttribute' }, i({ class: "fas fa-times" })))));
 
         // add to the addAttributes panel
         document.querySelector('.addAttributes').appendChild(node);
@@ -525,12 +547,14 @@ function generateInitialAttributeForm() {
 function submitDevices() {
 
     devicesData = {};
+    devicesSpecialData = {};
     removeElements('.addAttributes div[data-device]');
 
     // store the different devices as keys in the devicesData object    
     Array.from(document.querySelectorAll('.createDevice')).forEach(function (inputField, index) {
         if (!(inputField.value === "")) {
             devicesData[inputField.value] = {};
+            devicesSpecialData[inputField.value] = {};
         }
     });
 
@@ -608,13 +632,16 @@ function attributeInputFieldClicked(e) {
 
     var attributeId = device + '/attribute' + numberOfAttributesCreated[device];
 
-    var container = div({ class: 'form-group animated slideInRight' }, div({ class: 'input-group' }, div({ class: 'input-group-addon' }, "Attribute " + numberOfAttributesCreated[device]), input({
+    var container = div({ class: 'form-group animated slideInRight' }, div({ class: 'input-group' }, div({ class: 'input-group-addon' }, "DataName " + numberOfAttributesCreated[device]), input({
         onClick: attributeInputFieldClicked,
         type: 'text',
         class: 'form-control createAttribute',
         id: attributeId,
-        placeholder: 'Attribute Name (No spaces)'
-    }), div({ onClick: removeCreatedAttribute, class: 'input-group-addon removeAttribute' }, 'x')));
+        placeholder: 'Data Name (No spaces)'
+    }), div({
+        onClick: removeCreatedAttribute,
+        class: 'input-group-addon removeAttribute'
+    }, i({ class: "fas fa-times" }))));
 
     clickedContainer.appendChild(container);
 
@@ -659,15 +686,15 @@ function generateDataValuesForm() {
 
         // create a form for every attribute for every device so the user can enter data type values
         var attributes = Object.keys(devicesData[device]);
-        attributes.forEach(function (attribute) {
 
+        attributes.forEach(function (attribute) {
             // drodown to select what the data type is of the attribute
             var dataTypesDropDown = select({
                 onChange: dataTypeSelected,
                 class: 'form-control',
                 'data-attribute': attribute,
                 'data-device': device
-            }, option({}, "String"), option({}, "Number"), option({}, "Boolean"), option({}, "GPS-String"));
+            }, option({}, "String"), option({}, "Number"), option({}, "Boolean"));
 
             // input field to enter categorical values
             var categoryInput = input({
@@ -713,13 +740,16 @@ function submitAttributes() {
     removeElements('.addDataValues div[data-device]');
 
     var devices = Array.from(document.querySelectorAll('[data-device]'));
+    var dataValidated = true;
 
     devices.forEach(function (device) {
         var attributes = Array.from(device.querySelectorAll('.createAttribute'));
+
         var name = device.dataset.device;
 
         // first clear the specific object again
         devicesData[name] = {};
+        devicesSpecialData[name] = {};
 
         // loop through attributes and write them to the correct place in the object
         attributes.forEach(function (attribute) {
@@ -727,14 +757,30 @@ function submitAttributes() {
                 devicesData[name][attribute.value] = {};
             }
         });
+
+        specialAttributesClassNames.forEach(function (specialAttributesClassName) {
+            var specialAttributesClass = Array.from(device.querySelectorAll(specialAttributesClassName));
+            specialAttributesClass.forEach(function (specialAttributeClass) {
+                var specialAttributeValue = specialAttributeClass.value;
+                if (!(specialAttributeValue === "")) {
+                    devicesSpecialData[name][specialAttributesClassNamesMap[specialAttributesClassName]] = specialAttributeValue;
+                } else {
+                    dataValidated = false;
+                }
+            });
+        });
     });
 
-    generateDataValuesForm();
+    if (dataValidated) {
+        generateDataValuesForm();
 
-    $.notify({ message: 'Attributes saved succesfully!' }, { type: 'success' });
+        $.notify({ message: 'Attributes saved succesfully!' }, { type: 'success' });
 
-    $('#collapseAddAttributes').collapse('hide');
-    $('#collapseDataValues').collapse('show');
+        $('#collapseAddAttributes').collapse('hide');
+        $('#collapseDataValues').collapse('show');
+    } else {
+        $.notify({ message: 'Gcode and send frequence cannot be empty!' }, { type: 'danger' });
+    }
 }
 
 // ---- functions needed in the data values panel ---- //
@@ -767,10 +813,8 @@ function submitDataValues() {
 
                     // user select the string as input, so we read the category input field for values
                     var stringInput = device.querySelector('#categories[data-attribute=' + attributeName + ']').value;
-                    var parsedStringInput = stringInput.split(',');
-
                     // write the possible values to the devicesData
-                    currentAttribute["categories"] = parsedStringInput;
+                    currentAttribute["categories"] = stringInput.split(',');
 
                     // put the current device's attribute in our stringArray so we can loop trough that array for the control panel
                     amountOfStringValues.push(currentAttribute);
@@ -806,42 +850,12 @@ function submitDataValues() {
     $.notify({ message: 'Data Values saved succesfully!' }, { type: 'success' });
 
     $('#collapseDataValues').collapse('hide');
-    $('#collapseSDSSetup').collapse('show');
-}
-
-// ---- functions needed in the sds settings panel ---- //
-
-function skipSds() {
-
-    $.notify({ message: 'No SDS project!' }, { type: 'success' });
-
     $('#collapseControlPanel').collapse('show');
-    $('#collapseSDSSetup').collapse('hide');
-}
-
-function submitSds() {
-
-    isSdsProject = true;
-
-    // store the server name
-    sdsSettings.serverName = document.querySelector('.sdsServerName').value;
-
-    // store the streaming project name
-    sdsSettings.projectName = document.querySelector('.sdsProjectName').value;
-
-    // store the input stream name
-    sdsSettings.inputStreamName = document.querySelector('.sdsInputStreamName').value;
-
-    $.notify({ message: 'SDS settings saved!' }, { type: 'success' });
-
-    $('#collapseControlPanel').collapse('show');
-    $('#collapseSDSSetup').collapse('hide');
 }
 
 function generateControlPanel() {
     // for every value in the numbersValues array, create a slider
     amountOfNumberValues.forEach(function (value) {
-
         var slider = input({
             style: 'width:100%',
             id: value.attributeName + "-" + value.deviceName,
@@ -953,74 +967,15 @@ function nudge(e) {
         imageToAnimate.removeAttribute('class');
     });
 
-    // play the homer sound
-    var audio = new Audio('./audio/doh.mp3');
-    audio.play();
-
     // set the boolean value to true for 1.5 second
     devicesData[device][attribute]["fixedValue"] = "true";
-
-    console.log(devicesData[device][attribute]);
-    setTimeout(function () {
-        devicesData[device][attribute]["fixedValue"] = select.options[select.selectedIndex].value;
-        console.log(devicesData[device][attribute]);
-    }, 4000);
 }
 
 function startStreaming() {
-
-    if (isSdsProject) {
-
-        var url = "http://" + sdsSettings.serverName + ":9093/1/authorization";
-        var credentials = [{
-            "privilege": "write",
-            "resourceType": "stream",
-            "resource": "default/" + sdsSettings.projectName + "/" + sdsSettings.inputStreamName
-        }];
-
-        var settings = {
-            "async": true,
-            "crossDomain": true,
-            "url": url,
-            "method": "POST",
-            "headers": {
-                "authorization": "Basic " + btoa(document.querySelector('.sdsUsername').value + ":" + document.querySelector('.sdsPassword').value),
-                "cache-control": "no-cache"
-            },
-            "data": JSON.stringify(credentials)
-
-            // fetch the logontoken
-        };$.ajax(settings).done(function (response) {
-
-            // create post url
-            var postUrl = "http://" + sdsSettings.serverName + ":9093/1/workspaces/default/projects/" + sdsSettings.projectName + "/streams/" + sdsSettings.inputStreamName;
-
-            // slice the first chars and the last so we only keep the pure token
-            var token = JSON.stringify(response).slice(18, -5) + '"';
-
-            var i = setInterval(function () {
-                var settings = {
-                    "async": true,
-                    "crossDomain": true,
-                    "url": postUrl,
-                    "method": "POST",
-                    "headers": {
-                        "authorization": 'SWS-Token "sws-token"=' + token,
-                        "cache-control": "no-cache"
-                    },
-                    "data": JSON.stringify(getDataToSend())
-                };
-                $.ajax(settings).done(function (response) {
-                    console.log("posted successfully, " + response);
-                });
-            }, 1000);
-
-            streamingInterval.push(i);
-        });
-    } else {
-        var i = setInterval(sendData, 1000);
-        streamingInterval.push(i);
-    }
+    var devices = Object.keys(devicesData);
+    devices.forEach(function (device) {
+        sendDeviceGcode(device);
+    });
 }
 
 function flushDb() {
@@ -1040,14 +995,12 @@ function flushDb() {
 }
 
 function stopStreaming() {
-
-    clearInterval(streamingInterval[0]);
-    // reset to empty array
+    streamingInterval.forEach(function (interval) {
+        clearInterval(interval);
+    });
     streamingInterval = [];
 
-    if (!isSdsProject) {
-        flushDb();
-    }
+    flushDb();
 }
 
 function controlPanelDropDownSelected(e) {
@@ -1059,65 +1012,95 @@ function controlPanelDropDownSelected(e) {
     devicesData[device][attribute]["fixedValue"] = select.options[select.selectedIndex].value;
 }
 
-function getDataToSend() {
+function getDataToSend(device) {
 
-    var dataToBeSend = [];
+    var dataToBeSend = {};
+    dataToBeSend["deviceName"] = device;
+    dataToBeSend["attributes"] = [];
+    dataToBeSend["timestamp"] = "";
 
-    // build object to be send for every device
-    var devices = Object.keys(devicesData);
+    if (!currentGcodes.hasOwnProperty(device)) {
+        currentGcodes[device] = 0;
+    }
 
-    devices.forEach(function (device) {
-        // attribute names
-        var attributes = Object.keys(devicesData[device]);
+    var gcodeToolpathLength = devicesSpecialData[device]["toolpaths"].length - 1;
+    var currentGcode = ++currentGcodes[device] < gcodeToolpathLength ? currentGcodes[device] : gcodeToolpathLength;
 
-        attributes.forEach(function (attribute, index) {
-            var value = "";
-            var currentAttribute = devicesData[device][attribute];
+    // attribute names
+    var attributeNames = Object.keys(devicesData[device]);
+    attributeNames.forEach(function (attributeName, index) {
+        var value = "";
+        var currentAttribute = devicesData[device][attributeName];
 
-            // check if there is a fixed value present to override the random default
-            var hasFixedValue = currentAttribute["fixedValue"] && currentAttribute["fixedValue"] !== "--";
+        // check if there is a fixed value present to override the random default
+        var hasFixedValue = currentAttribute["fixedValue"] && currentAttribute["fixedValue"] !== "--";
 
-            // get random option from the categories array if dataType is String or Boolean
-            if (currentAttribute["dataType"] === "String" || currentAttribute["dataType"] === "Boolean") {
-                value = hasFixedValue ? currentAttribute["fixedValue"] : currentAttribute["categories"][Math.floor(Math.random() * currentAttribute["categories"].length)];
-            } else {
-                value = hasFixedValue ? currentAttribute["fixedValue"] : Math.random() * (parseInt(currentAttribute.max) - parseInt(currentAttribute.min)) + parseInt(currentAttribute.min);
-            }
+        // get random option from the categories array if dataType is String or Boolean
+        if (currentAttribute["dataType"] === "String" || currentAttribute["dataType"] === "Boolean") {
+            value = hasFixedValue ? currentAttribute["fixedValue"] : currentAttribute["categories"][Math.floor(Math.random() * currentAttribute["categories"].length)];
+        } else {
+            value = hasFixedValue ? currentAttribute["fixedValue"] : Math.random() * (parseInt(currentAttribute.max) - parseInt(currentAttribute.min)) + parseInt(currentAttribute.min);
+        }
 
-            // put that value in the object
-            currentAttribute["value"] = "" + value;
-
-            // add special field to indicate we want to insert into a tabel (for SDS projects)
-            currentAttribute["ESP_OPS"] = "i";
-
-            // put a timestamp in the data object
-            currentAttribute["timestamp"] = new Date().toISOString();
-
-            // put that in the array (because that is the format that SDS expects: array of objects)
-            dataToBeSend.push(currentAttribute);
+        dataToBeSend["attributes"].push({
+            "attributeName": attributeName,
+            "value": value,
+            "dataType": currentAttribute["dataType"]
         });
+
+        // put a timestamp in the data object
+        dataToBeSend["timestamp"] = new Date().toISOString();
+    });
+
+    // push toolpath
+    dataToBeSend["attributes"].push({
+        "attributeName": "toolpath",
+        "value": devicesSpecialData[device]["toolpaths"][currentGcode],
+        "dataType": "Object"
     });
 
     return dataToBeSend;
 }
 
-function sendData() {
+function sendData(device) {
+    function sendData() {
+        var dataJson = JSON.stringify(getDataToSend(device));
+        var dataUrl = 'http://' + localIP + ':3000/simulator/data';
+        var settings = generatePostJsonSettings(dataUrl, dataJson);
 
-    var settings = {
+        $.ajax(settings).done(function (response) {
+            console.log("posted successfully, " + response);
+        });
+    }
+    return sendData;
+}
+
+function sendDeviceGcode(device) {
+    var gcodeJson = JSON.stringify({ "device": device, "gcode": devicesSpecialData[device]["gcode"] });
+    var gcodeURL = 'http://' + localIP + ':3000/simulator/data/gcode';
+    var settings = generatePostJsonSettings(gcodeURL, gcodeJson);
+
+    $.ajax(settings).done(function (response) {
+        console.log('Gcode posted and toolpaths generated successfully');
+        devicesSpecialData[device]["toolpaths"] = response;
+        var i = setInterval(sendData(device), parseInt(devicesSpecialData[device]["freq"]));
+        streamingInterval.push(i);
+    });
+}
+
+function generatePostJsonSettings(url, data) {
+    return {
         "async": true,
         "crossDomain": true,
-        "url": "http://localhost:3000/simulator/data",
+        "url": url,
         "method": "POST",
         "headers": {
             "content-type": "application/json",
             "cache-control": "no-cache"
         },
         "processData": false,
-        "data": JSON.stringify(getDataToSend())
+        "data": data
     };
-    $.ajax(settings).done(function (response) {
-        console.log("posted successfully, " + response);
-    });
 }
 
 // ##############################################################
@@ -1141,12 +1124,6 @@ submitAttributesButton.addEventListener('click', submitAttributes);
 // ---- Event Listeners needed in the add data types panel ---- //
 
 submitDataValuesButton.addEventListener('click', submitDataValues);
-
-// ---- Event Listeners needed in the sds project settings panel ---- //
-
-skipSdsSettingsButton.addEventListener('click', skipSds);
-
-submitSdsSettingsButton.addEventListener('click', submitSds);
 
 // ---- Event Listeners needed in the live control panel ---- //
 

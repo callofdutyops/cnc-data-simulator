@@ -8,8 +8,6 @@ const submitAttributesButton = document.querySelector('#submitAttributes');
 const submitDataValuesButton = document.querySelector('#submitDataValues');
 const startStreamButton = document.querySelector('#startStream');
 const stopStreamButton = document.querySelector('#stopStream');
-const submitSdsSettingsButton = document.querySelector('#safeSDSSettings');
-const skipSdsSettingsButton = document.querySelector('#skipSDS');
 
 // --- Input fields ---//
 const createDeviceInputFields = Array.from(document.querySelectorAll('.createDevice'));
@@ -32,15 +30,18 @@ const amountOfNumberValues = [];
 const amountOfBooleanValues = [];
 const amountOfStringValues = [];
 
+// which line of gcode should be sent per CNC.
+let currentGcodes = {};
+
+// store special attributes class
+const specialAttributesClassNames = [".gcodeAttribute", ".freqAttribute"];
+const specialAttributesClassNamesMap = {".gcodeAttribute": "gcode", ".freqAttribute": "freq"};
+
 // array of base64 image urls
 const devicePictures = [];
 
 // global var to store the interval running to push data (so we can clear it)
 let streamingInterval = [];
-
-// if sds project is used, store the settings entered by the user
-let isSdsProject = false;
-let sdsSettings = {};
 
 // vars to store the amount of devices and attributes created (to show counter next to input field)
 let numberOfCreateDevicesInputFields = 1;
@@ -48,11 +49,11 @@ let numberOfAttributesCreated = {};
 
 // object to store all data the user enters
 let devicesData = {};
+let devicesSpecialData = {};
 
 // using elementx to create DOM elements (cleaner syntax that just document.createElement)
 const {
     div,
-    h1,
     h2,
     button,
     input,
@@ -62,53 +63,60 @@ const {
     option,
     img,
     form,
-    p
+    p,
+    i,
+    textarea
 } = require('elementx');
+
+// local ip address
+const localIP = '192.168.1.154';
 
 // ##############################################################
 // ######           Functions                              ######
 // ##############################################################
 
 function removeElements(selector) {
-    
+
     const elements = $(selector);
-        elements.each(function(index, element) {
-           element.remove();
-        }); 
+    elements.each(function (index, element) {
+        element.remove();
+    });
 }
 
 // ---- functions needed in the create devices panel ---- //
 function removeCreatedDevice(e) {
-    
+
     const elementToBeRemoved = e.path[3];
     createDeviceForm.removeChild(elementToBeRemoved);
     numberOfCreateDevicesInputFields--;
-    
+
 }
 
 function deviceInputFieldClicked() {
 
-    if (document.querySelectorAll('.createDevice').length <= 20) {
+    if (document.querySelectorAll('.createDevice').length < 20) {
         numberOfCreateDevicesInputFields++;
         const deviceId = `device${numberOfCreateDevicesInputFields}`;
 
         // build the new input field
         const container =
             div(
-                div({ class: 'form-group animated slideInRight'},
-                    div({ class: 'input-group' },
-                        div({ class: 'input-group-addon' }, 'Device ' + numberOfCreateDevicesInputFields),
+                div({class: 'form-group animated slideInRight'},
+                    div({class: 'input-group'},
+                        div({class: 'input-group-addon'}, 'CNC ' + numberOfCreateDevicesInputFields),
                         input({
                             onClick: deviceInputFieldClicked,
                             type: 'text',
                             class: 'form-control createDevice',
                             id: deviceId,
-                            placeholder: 'Device name (No Spaces)'
+                            placeholder: 'CNC name (No Spaces)'
                         }),
-                        div({ onClick: removeCreatedDevice, class: 'input-group-addon removeDevice' }, 'x')
+                        div({onClick: removeCreatedDevice, class: 'input-group-addon removeDevice'},
+                            i({class: "fas fa-times"})
+                        )
                     ),
-                    label({ class: 'btn btn-default btn-file', style: 'margin-top:10px' },
-                        span({ class: 'deviceImageLabel' }, 'Select Picture'),
+                    label({class: 'btn btn-default btn-file', style: 'margin-top:10px'},
+                        span({class: 'deviceImageLabel'}, 'Select Picture'),
                         input({
                             onChange: pictureSelected,
                             type: 'file',
@@ -126,7 +134,7 @@ function deviceInputFieldClicked() {
             container.firstChild.className = "form-group";
         });
     }
-    
+
 }
 
 function generateInitialAttributeForm() {
@@ -138,21 +146,47 @@ function generateInitialAttributeForm() {
         numberOfAttributesCreated[device] = 1;
         const attributeId = `${device}/attribute${numberOfAttributesCreated[device]}`;
 
+        const gcodeId = `${device}/gcode`;
+        const freqId = `${device}/freq`;
+
         // create the a form for each device entered
         const node =
-            div({ 'data-device': device },
+            div({'data-device': device},
                 h2({}, device),
-                div({ class: 'form-group' },
-                    div({ class: 'input-group' },
-                        div({ class: 'input-group-addon' }, 'Attribute ' + numberOfAttributesCreated[device]),
+                div({class: 'form-group'},
+                    label({for: gcodeId}, "Gcode:"),
+                    textarea({
+                        class: "form-control gcodeAttribute",
+                        style: "height: 500px;",
+                        row: "50",
+                        id: gcodeId
+                    })
+                ),
+                div({class: 'form-group'},
+                    div({class: 'input-group'},
+                        div({class: 'input-group-addon'}, 'SendFrequence(ms)'),
+                        input({
+                            type: 'number',
+                            class: 'form-control freqAttribute',
+                            id: freqId,
+                            placeholder: 'Data send frequence (unit is ms)',
+                            value: "500"
+                        }),
+                    )
+                ),
+                div({class: 'form-group'},
+                    div({class: 'input-group'},
+                        div({class: 'input-group-addon'}, 'DataName ' + numberOfAttributesCreated[device]),
                         input({
                             onClick: attributeInputFieldClicked,
                             type: 'text',
                             class: 'form-control createAttribute',
                             id: attributeId,
-                            placeholder: 'Attribute Name (No spaces)'
+                            placeholder: 'Data Name (No spaces)'
                         }),
-                        div({ class: 'input-group-addon removeAttribute' }, 'x')
+                        div({class: 'input-group-addon removeAttribute'},
+                            i({class: "fas fa-times"})
+                        )
                     )
                 )
             );
@@ -164,25 +198,27 @@ function generateInitialAttributeForm() {
 }
 
 function submitDevices() {
-    
+
     devicesData = {};
+    devicesSpecialData = {};
     removeElements('.addAttributes div[data-device]');
 
     // store the different devices as keys in the devicesData object    
     Array.from(document.querySelectorAll('.createDevice')).forEach(function (inputField, index) {
         if (!(inputField.value === "")) {
             devicesData[inputField.value] = {};
+            devicesSpecialData[inputField.value] = {};
         }
     });
 
     // if object is empty
     if (Object.keys(devicesData).length === 0 && devicesData.constructor === Object) {
-        $.notify({ message: 'Please fill in at least 1 device.'}, { type: 'danger' });
+        $.notify({message: 'Please fill in at least 1 device.'}, {type: 'danger'});
     } else {
         generateInitialAttributeForm();
         generateImagesInControlPanel();
 
-        $.notify({ message: 'Devices saved succesfully!' }, { type: 'success' });
+        $.notify({message: 'Devices saved succesfully!'}, {type: 'success'});
 
         $('#collapseCreateDevices').collapse('hide');
         $('#collapseAddAttributes').collapse('show');
@@ -229,7 +265,7 @@ function pictureSelected(e) {
         const reader = new FileReader();
         reader.onload = function (e) {
             devicePictures.push(e.target.result);
-        }
+        };
         const image = reader.readAsDataURL(this.files[0]);
     }
 }
@@ -237,13 +273,13 @@ function pictureSelected(e) {
 // ---- functions needed in the create attributes panel ---- //
 
 function removeCreatedAttribute(e) {
-    
+
     const elementToBeRemoved = e.path[2];
     const parentElement = e.path[3];
     const device = parentElement.dataset.device;
     parentElement.removeChild(elementToBeRemoved);
     numberOfAttributesCreated[device]--;
-    
+
 }
 
 function attributeInputFieldClicked(e) {
@@ -257,17 +293,21 @@ function attributeInputFieldClicked(e) {
     const attributeId = `${device}/attribute${numberOfAttributesCreated[device]}`;
 
     const container =
-        div({ class: 'form-group animated slideInRight' },
-            div({ class: 'input-group' },
-                div({ class: 'input-group-addon' }, "Attribute " + numberOfAttributesCreated[device]),
+        div({class: 'form-group animated slideInRight'},
+            div({class: 'input-group'},
+                div({class: 'input-group-addon'}, "DataName " + numberOfAttributesCreated[device]),
                 input({
                     onClick: attributeInputFieldClicked,
                     type: 'text',
                     class: 'form-control createAttribute',
                     id: attributeId,
-                    placeholder: 'Attribute Name (No spaces)'
+                    placeholder: 'Data Name (No spaces)'
                 }),
-                div({ onClick: removeCreatedAttribute, class: 'input-group-addon removeAttribute' }, 'x')
+                div({
+                        onClick: removeCreatedAttribute,
+                        class: 'input-group-addon removeAttribute'
+                    }, i({class: "fas fa-times"})
+                ),
             )
         );
 
@@ -280,13 +320,13 @@ function attributeInputFieldClicked(e) {
 }
 
 function dataTypeSelected() {
-    
+
     const attribute = this.dataset.attribute;
     const device = this.dataset.device;
-    const form = document.querySelector('form[data-attribute="' +attribute+ '/' +device+ '"]');
+    const form = document.querySelector(`form[data-attribute="${attribute}/${device}"]`);
     const selectedValue = this.value;
-    const categoryInput = form.querySelector('input[data-attribute=' + attribute + ']');
-    const rangeInput = form.querySelector('div[data-attribute=' + attribute + ']');
+    const categoryInput = form.querySelector(`input[data-attribute=${attribute}]`);
+    const rangeInput = form.querySelector(`div[data-attribute=${attribute}]`);
 
     if (selectedValue === "Number") {
         categoryInput.style.display = "none";
@@ -302,7 +342,7 @@ function dataTypeSelected() {
         categoryInput.style.display = "none";
         rangeInput.style.display = "none";
     }
-    
+
 }
 
 function generateDataValuesForm() {
@@ -311,14 +351,15 @@ function generateDataValuesForm() {
 
     devices.forEach(function (device) {
         // create the container
-        const container = div({ 'data-device': device },
+        const container = div(
+            {'data-device': device},
             h2({}, device)
         );
 
         // create a form for every attribute for every device so the user can enter data type values
         const attributes = Object.keys(devicesData[device]);
-        attributes.forEach(function (attribute) {
 
+        attributes.forEach(function (attribute) {
             // drodown to select what the data type is of the attribute
             const dataTypesDropDown =
                 select({
@@ -329,8 +370,7 @@ function generateDataValuesForm() {
                     },
                     option({}, "String"),
                     option({}, "Number"),
-                    option({}, "Boolean"),
-                    option({}, "GPS-String")
+                    option({}, "Boolean")
                 );
 
             // input field to enter categorical values
@@ -347,7 +387,7 @@ function generateDataValuesForm() {
 
             // input field to enter numerical values
             const rangeInput =
-                div({ style: 'display:none', 'data-attribute': attribute },
+                div({style: 'display:none', 'data-attribute': attribute},
                     p({}, 'From'),
                     input({
                         style: 'width:100%',
@@ -370,36 +410,36 @@ function generateDataValuesForm() {
                     }),
                 );
 
-
             const dataValueForm =
-                form({ class: 'form-inline', 'data-attribute': `${attribute}/${device}` },
-                    p({ class: 'attribute' }, attribute),
+                form({class: 'form-inline', 'data-attribute': `${attribute}/${device}`},
+                    p({class: 'attribute'}, attribute),
                     dataTypesDropDown,
                     categoryInput,
                     rangeInput
                 );
 
             container.appendChild(dataValueForm);
-
         });
 
         createDataValueForm.appendChild(container);
-
     });
 }
 
 function submitAttributes() {
-    
+
     removeElements('.addDataValues div[data-device]');
 
     const devices = Array.from(document.querySelectorAll('[data-device]'));
+    let dataValidated = true;
 
     devices.forEach(function (device) {
         const attributes = Array.from(device.querySelectorAll('.createAttribute'));
+
         const name = device.dataset.device;
-        
+
         // first clear the specific object again
         devicesData[name] = {};
+        devicesSpecialData[name] = {};
 
         // loop through attributes and write them to the correct place in the object
         attributes.forEach(function (attribute) {
@@ -407,15 +447,30 @@ function submitAttributes() {
                 devicesData[name][attribute.value] = {};
             }
         });
+
+        specialAttributesClassNames.forEach(function (specialAttributesClassName) {
+            const specialAttributesClass = Array.from(device.querySelectorAll(specialAttributesClassName));
+            specialAttributesClass.forEach(function (specialAttributeClass) {
+                const specialAttributeValue = specialAttributeClass.value;
+                if (!(specialAttributeValue === "")) {
+                    devicesSpecialData[name][specialAttributesClassNamesMap[specialAttributesClassName]] = specialAttributeValue;
+                } else {
+                    dataValidated = false;
+                }
+            });
+        });
     });
 
-    generateDataValuesForm();
+    if (dataValidated) {
+        generateDataValuesForm();
 
-    $.notify({ message: 'Attributes saved succesfully!' }, { type: 'success' });
+        $.notify({message: 'Attributes saved succesfully!'}, {type: 'success'});
 
-    $('#collapseAddAttributes').collapse('hide');
-    $('#collapseDataValues').collapse('show');
-
+        $('#collapseAddAttributes').collapse('hide');
+        $('#collapseDataValues').collapse('show');
+    } else {
+        $.notify({message: 'Gcode and send frequence cannot be empty!'}, {type: 'danger'});
+    }
 }
 
 // ---- functions needed in the data values panel ---- //
@@ -432,7 +487,7 @@ function submitDataValues() {
         // loop through different attributes and write the selections to our main object, devicesData
         attributes.forEach(function (attribute) {
             const attributeName = attribute.innerHTML;
-            const dataTypesDropdown = Array.from(device.querySelectorAll('select[data-attribute=' + attributeName + ']'));
+            const dataTypesDropdown = Array.from(device.querySelectorAll(`select[data-attribute=${attributeName}]`));
             const currentAttribute = devicesData[deviceName][attributeName];
 
             // loop through every dropdown to write the type of data and based on that write the values in the inputfields
@@ -447,11 +502,9 @@ function submitDataValues() {
                 if (dropdownValue === "String") {
 
                     // user select the string as input, so we read the category input field for values
-                    const stringInput = device.querySelector('#categories[data-attribute=' + attributeName + ']').value;
-                    const parsedStringInput = stringInput.split(',');
-
+                    const stringInput = device.querySelector(`#categories[data-attribute=${attributeName}]`).value;
                     // write the possible values to the devicesData
-                    currentAttribute["categories"] = parsedStringInput;
+                    currentAttribute["categories"] = stringInput.split(',');
 
                     // put the current device's attribute in our stringArray so we can loop trough that array for the control panel
                     amountOfStringValues.push(currentAttribute);
@@ -460,8 +513,8 @@ function submitDataValues() {
 
                 if (dropdownValue === "Number") {
 
-                    const from = device.querySelector('#range-from[data-attribute=' + attributeName + ']').value;
-                    const to = device.querySelector('#range-to[data-attribute=' + attributeName + ']').value;
+                    const from = device.querySelector(`#range-from[data-attribute=${attributeName}]`).value;
+                    const to = device.querySelector(`#range-to[data-attribute=${attributeName}]`).value;
 
                     // write the min and max values to our devicesData
                     currentAttribute["min"] = from;
@@ -472,7 +525,7 @@ function submitDataValues() {
                 }
 
                 if (dropdownValue === "Boolean") {
-                    
+
                     // write the possible values to the devicesData
                     currentAttribute["categories"] = [true, false];
 
@@ -483,53 +536,19 @@ function submitDataValues() {
             });
 
         });
-
     });
 
     generateControlPanel();
 
-    $.notify({ message: 'Data Values saved succesfully!' }, { type: 'success' });
+    $.notify({message: 'Data Values saved succesfully!'}, {type: 'success'});
 
     $('#collapseDataValues').collapse('hide');
-    $('#collapseSDSSetup').collapse('show');
-}
-
-// ---- functions needed in the sds settings panel ---- //
-
-function skipSds() {
-
-    $.notify({ message: 'No SDS project!' }, { type: 'success' });
-
     $('#collapseControlPanel').collapse('show');
-    $('#collapseSDSSetup').collapse('hide');
-
-}
-
-function submitSds() {
-
-    isSdsProject = true;
-
-    // store the server name
-    sdsSettings.serverName = document.querySelector('.sdsServerName').value;
-
-    // store the streaming project name
-    sdsSettings.projectName = document.querySelector('.sdsProjectName').value;
-
-    // store the input stream name
-    sdsSettings.inputStreamName = document.querySelector('.sdsInputStreamName').value;
-
-    $.notify({ message: 'SDS settings saved!' }, { type: 'success' });
-
-    $('#collapseControlPanel').collapse('show');
-    $('#collapseSDSSetup').collapse('hide');
-
-
 }
 
 function generateControlPanel() {
     // for every value in the numbersValues array, create a slider
     amountOfNumberValues.forEach(function (value) {
-
         const slider =
             input({
                 style: 'width:100%',
@@ -544,7 +563,6 @@ function generateControlPanel() {
                 'data-device': value.deviceName
             });
 
-
         const container =
             div({
                     onClick: sliderValueChanged,
@@ -554,7 +572,7 @@ function generateControlPanel() {
                 },
                 p({}, "Adjust range for " + value.attributeName + " (" + value.deviceName + "):"),
                 slider
-            )
+            );
 
         // append the container to the body
         controlsForNumberValues.appendChild(container);
@@ -573,20 +591,19 @@ function generateControlPanel() {
                     'data-attribute': value.attributeName,
                     'data-device': value.deviceName
                 },
-                p({ style: 'padding-left:15px' }, "Fix value for " + value.attributeName + " (" + value.deviceName + "):"),
-                div({ class: 'col-md-9' },
+                p({style: 'padding-left:15px'}, "Fix value for " + value.attributeName + " (" + value.deviceName + "):"),
+                div({class: 'col-md-9'},
                     select({
                             class: 'form-control',
                             'data-attribute': value.attributeName,
                             'data-device': value.deviceName
                         },
-                        option({ value: '--' }, '--'),
-                        option({ value: 'true' }, 'true'),
-                        option({ value: 'false' }, 'false')
-
+                        option({value: '--'}, '--'),
+                        option({value: 'true'}, 'true'),
+                        option({value: 'false'}, 'false')
                     )
                 ),
-                div({ class: 'col-md-3' },
+                div({class: 'col-md-3'},
                     button({
                         onClick: nudge,
                         class: 'btn btn-danger btn-block nudge',
@@ -609,7 +626,7 @@ function generateControlPanel() {
                     'data-attribute': value.attributeName,
                     'data-device': value.deviceName
                 },
-                option({ value: '--' }, '--')
+                option({value: '--'}, '--')
             );
 
         const container =
@@ -630,7 +647,7 @@ function generateControlPanel() {
         const categories = value.categories;
 
         categories.forEach(function (category) {
-            const opt = option({ value: category }, category);
+            const opt = option({value: category}, category);
             dropdown.appendChild(opt);
         });
     });
@@ -640,113 +657,49 @@ function generateControlPanel() {
 // ---- functions needed for the control panel ---- //
 
 function sliderValueChanged(e) {
-    
+
     const attribute = this.dataset.attribute;
     const device = this.dataset.device;
     const controlPanel = document.querySelector('.controlPanel');
-    const inputField = controlPanel.querySelector('input[data-attribute=' + attribute + '][data-device=' + device + ']');
+    const inputField = controlPanel.querySelector(`input[data-attribute=${attribute}][data-device=${device}]`);
     const minMax = inputField.dataset.value;
     const min = minMax.split(',')[0];
     const max = minMax.split(',')[1];
 
     devicesData[device][attribute].min = min;
     devicesData[device][attribute].max = max;
-    
 }
 
 function nudge(e) {
-    
+
     const device = this.dataset.device;
     const attribute = this.dataset.attribute;
     const controlPanel = document.querySelector('.controlPanel');
-    const select = controlPanel.querySelector('select[data-device=' + device + '][data-attribute=' + attribute + ']');
+    const select = controlPanel.querySelector(`select[data-device=${device}][data-attribute=${attribute}]`);
 
     // animate the corresponding picture
     // grab corresponding image
-    const imageToAnimate = document.querySelector('img[id=' + device + ']');
+    const imageToAnimate = document.querySelector(`img[id=${device}]`);
     imageToAnimate.className += 'animated tada';
 
     imageToAnimate.addEventListener('animationend', function (e) {
         imageToAnimate.removeAttribute('class');
     });
 
-    // play the homer sound
-    let audio = new Audio('./audio/doh.mp3');
-    audio.play();
-
     // set the boolean value to true for 1.5 second
     devicesData[device][attribute]["fixedValue"] = "true";
-
-    console.log(devicesData[device][attribute]);
-    setTimeout(function () {
-        devicesData[device][attribute]["fixedValue"] = select.options[select.selectedIndex].value;
-        console.log(devicesData[device][attribute]);
-    }, 4000);
 
 }
 
 function startStreaming() {
-
-    if (isSdsProject) {
-        
-        const url = "http://" + sdsSettings.serverName + ":9093/1/authorization";
-        const credentials = [
-            {
-                "privilege": "write",
-                "resourceType": "stream",
-                "resource": "default/" + sdsSettings.projectName + "/" + sdsSettings.inputStreamName
-            }
-        ];
-
-        let settings = {
-            "async": true,
-            "crossDomain": true,
-            "url": url,
-            "method": "POST",
-            "headers": {
-                "authorization": "Basic " + btoa(document.querySelector('.sdsUsername').value + ":" + document.querySelector('.sdsPassword').value),
-                "cache-control": "no-cache"
-            },
-            "data": JSON.stringify(credentials)
-        }
-
-        // fetch the logontoken
-        $.ajax(settings).done(function (response) {
-
-            // create post url
-            const postUrl = "http://" + sdsSettings.serverName +
-                ":9093/1/workspaces/default/projects/" + sdsSettings.projectName + "/streams/" + sdsSettings.inputStreamName;
-
-            // slice the first chars and the last so we only keep the pure token
-            const token = JSON.stringify(response).slice(18, -5) + '"';
-
-            const i = setInterval(function () {
-                let settings = {
-                    "async": true,
-                    "crossDomain": true,
-                    "url": postUrl,
-                    "method": "POST",
-                    "headers": {
-                        "authorization": 'SWS-Token "sws-token"=' + token,
-                        "cache-control": "no-cache"
-                    },
-                    "data": JSON.stringify(getDataToSend())
-                }
-                $.ajax(settings).done(function (response) {
-                    console.log("posted successfully, " + response);
-                });
-            }, 1000);
-
-            streamingInterval.push(i);
-        });
-    } else {
-        const i = setInterval(sendData, 1000);
-        streamingInterval.push(i);
-    }
+    const devices = Object.keys(devicesData);
+    devices.forEach(function (device) {
+        sendDeviceGcode(device);
+    });
 }
 
 function flushDb() {
-    
+
     let settings = {
         "async": true,
         "url": '/simulator/data/delete',
@@ -758,20 +711,17 @@ function flushDb() {
 
     $.ajax(settings).done(function (response) {
         console.log("Success: " + response);
-    }); 
-    
+    });
+
 }
 
 function stopStreaming() {
-    
-    clearInterval(streamingInterval[0]);
-    // reset to empty array
+    streamingInterval.forEach(function (interval) {
+        clearInterval(interval);
+    });
     streamingInterval = [];
-    
-    if (!isSdsProject) {
-        flushDb();
-    }
-    
+
+    flushDb();
 }
 
 function controlPanelDropDownSelected(e) {
@@ -781,69 +731,103 @@ function controlPanelDropDownSelected(e) {
     const select = this.querySelector('select');
 
     devicesData[device][attribute]["fixedValue"] = select.options[select.selectedIndex].value;
-
 }
 
-function getDataToSend() {
+function getDataToSend(device) {
 
-    const dataToBeSend = [];
+    const dataToBeSend = {};
+    dataToBeSend["deviceName"] = device;
+    dataToBeSend["attributes"] = [];
+    dataToBeSend["timestamp"] = "";
 
-    // build object to be send for every device
-    const devices = Object.keys(devicesData);
+    if (!currentGcodes.hasOwnProperty(device)) {
+        currentGcodes[device] = 0;
+    }
 
-    devices.forEach(function (device) {
-        // attribute names
-        const attributes = Object.keys(devicesData[device]);
+    const gcodeToolpathLength = devicesSpecialData[device]["toolpaths"].length - 1;
+    const currentGcode = ++currentGcodes[device] < gcodeToolpathLength ? currentGcodes[device] : gcodeToolpathLength;
 
-        attributes.forEach(function (attribute, index) {
-            let value = "";
-            const currentAttribute = devicesData[device][attribute];
+    // attribute names
+    const attributeNames = Object.keys(devicesData[device]);
+    attributeNames.forEach(function (attributeName, index) {
+        let value = "";
+        const currentAttribute = devicesData[device][attributeName];
 
-            // check if there is a fixed value present to override the random default
-            const hasFixedValue = currentAttribute["fixedValue"] && currentAttribute["fixedValue"] !== "--";
+        // check if there is a fixed value present to override the random default
+        const hasFixedValue = currentAttribute["fixedValue"] && currentAttribute["fixedValue"] !== "--";
 
-            // get random option from the categories array if dataType is String or Boolean
-            if (currentAttribute["dataType"] === "String" || currentAttribute["dataType"] === "Boolean") {
-                value = hasFixedValue ? currentAttribute["fixedValue"] : currentAttribute["categories"][Math.floor(Math.random() * currentAttribute["categories"].length)];
-            } else {
-                value = hasFixedValue ? currentAttribute["fixedValue"] : (Math.random() * (parseInt(currentAttribute.max) - parseInt(currentAttribute.min))) + parseInt(currentAttribute.min);
+        // get random option from the categories array if dataType is String or Boolean
+        if (currentAttribute["dataType"] === "String" || currentAttribute["dataType"] === "Boolean") {
+            value = hasFixedValue ? currentAttribute["fixedValue"] : currentAttribute["categories"][Math.floor(Math.random() * currentAttribute["categories"].length)];
+        } else {
+            value = hasFixedValue ? currentAttribute["fixedValue"] : (Math.random() * (parseInt(currentAttribute.max) - parseInt(currentAttribute.min))) + parseInt(currentAttribute.min);
+        }
+
+        dataToBeSend["attributes"].push(
+            {
+                "attributeName": attributeName,
+                "value": value,
+                "dataType": currentAttribute["dataType"]
             }
+        );
 
-            // put that value in the object
-            currentAttribute["value"] = "" + value;
-
-            // add special field to indicate we want to insert into a tabel (for SDS projects)
-            currentAttribute["ESP_OPS"] = "i";
-
-            // put a timestamp in the data object
-            currentAttribute["timestamp"] = new Date().toISOString();
-
-            // put that in the array (because that is the format that SDS expects: array of objects)
-            dataToBeSend.push(currentAttribute);
-        });
+        // put a timestamp in the data object
+        dataToBeSend["timestamp"] = new Date().toISOString();
     });
+
+    // push toolpath
+    dataToBeSend["attributes"].push(
+        {
+            "attributeName": "toolpath",
+            "value": devicesSpecialData[device]["toolpaths"][currentGcode],
+            "dataType": "Object"
+        }
+    );
 
     return dataToBeSend;
 }
 
-function sendData() {
 
-    var settings = {
-      "async": true,
-      "crossDomain": true,
-      "url": "http://localhost:3000/simulator/data",
-      "method": "POST",
-      "headers": {
-        "content-type": "application/json",
-        "cache-control": "no-cache"
-      },
-      "processData": false,
-      "data": JSON.stringify(getDataToSend())
+function sendData(device) {
+    function sendData() {
+        const dataJson = JSON.stringify(getDataToSend(device));
+        const dataUrl = `http://${localIP}:3000/simulator/data`;
+        const settings = generatePostJsonSettings(dataUrl, dataJson);
+
+        $.ajax(settings).done(function (response) {
+            console.log("posted successfully, " + response);
+        });
     }
-    $.ajax(settings).done(function (response) {
-        console.log("posted successfully, " + response);
-    });
+    return sendData;
+}
 
+
+function sendDeviceGcode(device) {
+    const gcodeJson = JSON.stringify({"device": device, "gcode": devicesSpecialData[device]["gcode"]});
+    const gcodeURL = `http://${localIP}:3000/simulator/data/gcode`;
+    const settings = generatePostJsonSettings(gcodeURL, gcodeJson);
+
+    $.ajax(settings).done(function (response) {
+        console.log(`Gcode posted and toolpaths generated successfully`);
+        devicesSpecialData[device]["toolpaths"] = response;
+        const i = setInterval(sendData(device), parseInt(devicesSpecialData[device]["freq"]));
+        streamingInterval.push(i);
+    });
+}
+
+function generatePostJsonSettings(url, data) {
+    return {
+        "async": true,
+        "crossDomain": true,
+        "url": url,
+        "method": "POST",
+        "headers": {
+            "content-type": "application/json",
+            "cache-control": "no-cache"
+        },
+        "processData": false,
+        "data": data
+    };
 }
 
 // ##############################################################
@@ -865,12 +849,6 @@ submitAttributesButton.addEventListener('click', submitAttributes);
 // ---- Event Listeners needed in the add data types panel ---- //
 
 submitDataValuesButton.addEventListener('click', submitDataValues);
-
-// ---- Event Listeners needed in the sds project settings panel ---- //
-
-skipSdsSettingsButton.addEventListener('click', skipSds);
-
-submitSdsSettingsButton.addEventListener('click', submitSds);
 
 // ---- Event Listeners needed in the live control panel ---- //
 

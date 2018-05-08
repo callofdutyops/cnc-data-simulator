@@ -9,16 +9,9 @@ mongoose.connect(mongoUrl);
 const db = mongoose.connection;
 
 const dataSchema = mongoose.Schema({
-    ESP_OPS: {type: String},
-    attributeName: {type: String},
-    categories: [String],
-    dataType: {type: String},
     deviceName: {type: String},
+    attributes: {type: Array},
     timestamp: {type: String},
-    value: {type: String},
-    fixedValue: {type: String},
-    min: {type: String},
-    max: {type: String}
 });
 
 const Data = module.exports = mongoose.model('Data', dataSchema);
