@@ -8,7 +8,7 @@ Simulate a CNC to stream data to Kafka.
 
 1. Add multiple CNCs.
 2. Add metrics of CNCs.
-2. Stream data to Kafka.
+3. Stream data to Kafka.
 
 ## Use
 
@@ -42,6 +42,10 @@ Simulate a CNC to stream data to Kafka.
 # Contributions
 
 Contributions and ideas are more than welcome!
+
+# TODO
+- [ ] Gcode toolpath generate
+- [ ] Store CNC and attributes in database
 
 # Troubleshooting / FAQ
 
